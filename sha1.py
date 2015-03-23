@@ -33,18 +33,18 @@ def rotateLeft(x, n):
 		
 # Выравнивание потока и добавление длины сообщения
 def alignment(msg):
-    msg_len = len(msg) * 8
-    msg.append(0x80)
-    while len(msg)% 64 != 56:
-	    msg += [0]  
-    for i in range(7, -1, -1):
-        msg.append(msg_len >> i * 8)
-        print "data ", msg		  
-    return msg			
+    bytes = ""
+    for i in range(len(msg)):
+        bytes+='{0:08b}'.format(ord(msg[i]))
+    bits = bytes + "1"
+    Bits_ = bits
+    while len(Bits_)%512 != 448:
+        Bits_+= "0"
+
+    Bits_+='{0:064b}'.format(len(bits) - 1)		
+    return Bits_			
 		
-def rounds(buf, x):
-    w = x
-    w.extend([0]*80)
+def rounds(buf, w):
     # 16 слов по 32-бита дополняются до 80 32-битовых слов:	
     for i in range(16, 80):
         w[i] = rotateLeft((w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16]), 1)
@@ -74,22 +74,20 @@ def rounds(buf, x):
         b = a
         a = temp
 
-    buf[0] += a & 0xffffffff
-    buf[1] += b & 0xffffffff
-    buf[2] += c & 0xffffffff
-    buf[3] += d & 0xffffffff
-    buf[4] += e & 0xffffffff
+    buf[0] = buf[0] + a & 0xffffffff
+    buf[1] = buf[1] + b & 0xffffffff
+    buf[2] =  buf[2] + c & 0xffffffff
+    buf[3] =  buf[3] + d & 0xffffffff
+    buf[4] = buf[4] + e & 0xffffffff
 
     return buf
 	
 	
-def main():
-    print "sha1"
-    data = ""
-    args = getArgs()
-    data = readFile(args.inFile)	
-    data = [ord(i) for i in data]
-	
+def chunks(l, n):
+    return [l[i:i+n] for i in range(0, len(l), n)]
+
+		
+def calc_sha1(data):
     # Шаг 1 Выравнивание потока
     # Шаг 2 Добавление длины сообщения
     data = alignment(data)
@@ -102,27 +100,31 @@ def main():
     buf[3] = 0x10325476
     buf[4] = 0xc3d2e1f0
 	
-	# поток байт  разбиваем на поток слов
-    data_words = []
-    for i in range(len(data) / 4): 
-        q = 0
-        for j in range(4):
-            q |= data[i * 4 + j] << (3 - j)* 8
-        data_words.append(q)
-	
     # Шаг 4 Вычисление в цикле
-    # разбиваем поток на блоки по 16 слов   
-    for i in range(0, len(data_words), 16):
-	    # i-ый блок заносится в х 
-        x = data_words[i:i+16]
-        buf = rounds(buf, x)
+  
+    for i in chunks(data, 512): 
+        words = chunks(i, 32)
+        w = [0]*80
+        for j in range(0, 16):
+            w[j] = int(words[j], 2)
+        buf = rounds(buf, w)
 			
     # Шаг 5 Результат вычислений 
 
     res = ""
     for i in buf:
         res += "{:08x}".format(i)
-    print "hash: ", res
+		
+    return res
+	
+	
+def main():
+    print "sha1"
+    data = ""
+    args = getArgs()
+    data = readFile(args.inFile)	
+    res = calc_sha1(data)
+    print "hash:   ", res
     writeFile(args.outFile, res)
 	
 	
